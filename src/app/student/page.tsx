@@ -1,92 +1,78 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
 
 type Category = {
   id: number
   name: string
-  prefix: string
 }
 
-type Queue = {
-  id: string
-  number: number
-  prefix: string
-  category: string
-  status: string
-}
-
-export default function StudentPage() {
+export default function Kiosk() {
   const [categories, setCategories] = useState<Category[]>([])
-  const [queue, setQueue] = useState<Queue | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [queueTaken, setQueueTaken] = useState(false)
+  const [currentNumber, setCurrentNumber] = useState<number | null>(null)
 
-  // Fetch categories from Supabase
   useEffect(() => {
     const fetchCategories = async () => {
-      const { data, error } = await supabase.from('categories').select('*')
-      if (error) {
-        console.error('Error fetching categories:', error)
-      } else {
-        setCategories(data)
-      }
+      const { data, error } = await supabase.from("categories").select()
+      if (!error) setCategories(data)
+    }
+
+    const fetchCurrentQueue = async () => {
+      const { data, error } = await supabase
+        .from("queues")
+        .select("number")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single()
+
+      if (!error && data) setCurrentNumber(data.number)
     }
 
     fetchCategories()
+    fetchCurrentQueue()
   }, [])
 
-  // Handle student taking a number
-  const takeNumber = async (category: Category) => {
-    setLoading(true)
-    const { data, error } = await supabase.rpc('take_queue_number', {
-      category_prefix: category.prefix,
-    })
+  const handleTakeQueue = async (categoryId: number) => {
+    const { error } = await supabase.from("queues").insert([
+      {
+        category_id: categoryId,
+        status: "waiting",
+      },
+    ])
+    if (!error) setQueueTaken(true)
+  }
 
-    if (error) {
-      console.error('Error taking queue number:', error)
-    } else {
-      setQueue(data)
-    }
-
-    setLoading(false)
+  if (queueTaken) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-green-50 text-green-800">
+        <h1 className="text-5xl font-bold mb-6">🎉 Queue Taken!</h1>
+        <p className="text-2xl">Please wait for your number to be called.</p>
+      </div>
+    )
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Student Queue System</h1>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-100 to-blue-300">
+      <h1 className="text-4xl font-bold mb-8 text-blue-900">Welcome! Take Your Queue</h1>
 
-      {queue ? (
-        <div className="p-4 rounded-lg bg-green-100">
-          <h2 className="text-xl font-semibold mb-2">Your Queue</h2>
-          <p className="mb-1">
-            <strong>Number:</strong> {queue.prefix}-{queue.number}
-          </p>
-          <p>
-            <strong>Status:</strong> {queue.status}
-          </p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            className="bg-blue-600 text-white text-2xl px-6 py-4 rounded-xl shadow-lg hover:bg-blue-700 transition"
+            onClick={() => handleTakeQueue(category.id)}
+          >
+            {category.name}
+          </button>
+        ))}
+      </div>
+
+      {currentNumber !== null && (
+        <div className="mt-10 text-2xl text-blue-800">
+          Current Number: <span className="font-bold">{currentNumber}</span>
         </div>
-      ) : (
-        <>
-          <p className="mb-4">Select a category to take your queue number:</p>
-          <ul className="space-y-2">
-            {categories.map((cat) => (
-              <li
-                key={cat.id}
-                className="p-4 rounded-lg shadow bg-white flex justify-between items-center"
-              >
-                <span>{cat.name}</span>
-                <button
-                  onClick={() => takeNumber(cat)}
-                  className="bg-blue-500 text-white px-3 py-1 rounded"
-                  disabled={loading}
-                >
-                  {loading ? 'Please wait…' : 'Take Number'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
       )}
     </div>
   )
